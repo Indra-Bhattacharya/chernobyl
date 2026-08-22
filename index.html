@@ -66,7 +66,10 @@
         canvas.height = window.innerHeight;
 		
 		// FIX 1: Make targetSize global so all resizing functions can read it
-        const TARGET_SIZE = 45; 
+        // FIX 1: Detect if user is on mobile. Shrink tiles to 24px so mobile fits a dense, complex maze!
+        const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const TARGET_SIZE = IS_MOBILE ? 24 : 45; 
+		
         let colsCalculated = Math.floor(canvas.width / TARGET_SIZE);
         let rowsCalculated = Math.floor(canvas.height / TARGET_SIZE);
         
