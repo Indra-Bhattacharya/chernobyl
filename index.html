@@ -9,7 +9,9 @@
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            height: 100vh; 
+            /* FIX: Use Dynamic Viewport dimensions to completely eliminate mobile address bar gaps */
+            height: 100dvh; 
+            width: 100dvw;
             margin: 0; 
             overflow: hidden; 
             /* FIX: Prevents mobile devices from pulling down to refresh or zooming the screen */
@@ -20,7 +22,10 @@
         }
         canvas { 
             background-color: #1a1a1a; 
-            display: block; 
+            display: block;
+			/* Force the canvas element bounds to follow the dynamic body dimensions */
+            width: 100%;
+            height: 100%;
         }
 
     </style>
@@ -113,9 +118,9 @@
             speed: 4 
         };
 
-        // Key Listeners
-        window.addEventListener('keydown', e => { keys[e.key] = true; });
-        window.addEventListener('keyup', e => { keys[e.key] = false; });
+		// Key Listeners (Forces lowercase string conversion for easy lookup matching)
+        window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
 		// Mobile Touch Listeners
         window.addEventListener('touchstart', e => {
@@ -140,29 +145,46 @@
             touchMove = null;
         });
 
-        function update() {
-			// Mobile Swipe Translation Vector Logic
+		function update() {
+            // Clear older active manual keyboard states by default
+            keys['ArrowUp'] = keys['ArrowDown'] = keys['ArrowLeft'] = keys['ArrowRight'] = false;
+
+            let moveX = 0;
+            let moveY = 0;
+
+            // FIX: Smooth Analog Vector Steering for Touch Screens
             if (touchStart && touchMove) {
                 let dx = touchMove.x - touchStart.x;
                 let dy = touchMove.y - touchStart.y;
-                let threshold = 15; // Minimum drag distance to register a movement command
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                let deadzone = 8; // Ignores tiny finger micro-shakes
 
-                // Clear older active automated states
-                keys['ArrowUp'] = keys['ArrowDown'] = keys['ArrowLeft'] = keys['ArrowRight'] = false;
+                if (distance > deadzone) {
+                    // Calculate the exact 360-degree angle of the thumb slide
+                    let angle = Math.atan2(dy, dx);
+                    
+                    // Convert the angle into smooth fractional movement speeds (between -1 and 1)
+                    moveX = Math.cos(angle);
+                    moveY = Math.sin(angle);
+                }
+            } else {
+                // Standard desktop keyboard input fallback
+                if (keys['arrowup'] || keys['w']) moveY = -1;
+                if (keys['arrowdown'] || keys['s']) moveY = 1;
+                if (keys['arrowleft'] || keys['a']) moveX = -1;
+                if (keys['arrowright'] || keys['d']) moveX = 1;
 
-                // Determine dominant movement axis swipe vector direction
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    if (dx > threshold) keys['ArrowRight'] = true;
-                    if (dx < -threshold) keys['ArrowLeft'] = true;
-                } else {
-                    if (dy > threshold) keys['ArrowDown'] = true;
-                    if (dy < -threshold) keys['ArrowUp'] = true;
+                // Normalize keyboard diagonals so you don't run faster when pressing two keys at once
+                if (moveX !== 0 && moveY !== 0) {
+                    moveX *= 0.7071;
+                    moveY *= 0.7071;
                 }
             }
-		
-            let nextX = player.x;
-            let nextY = player.y;
-            let radius = 12; // Player width safety bubble
+
+            // Apply movement direction directly to the player's core speed parameter
+            let nextX = player.x + (moveX * player.speed);
+            let nextY = player.y + (moveY * player.speed);
+            let radius = 12; 
 
             if (keys['ArrowUp'] || keys['w']) nextY -= player.speed;
             if (keys['ArrowDown'] || keys['s']) nextY += player.speed;
@@ -199,7 +221,7 @@
 			// Chernobyl unstable power management logic
             if (blackoutTimer > 0) {
                 blackoutTimer--; // Count down the active blackout frames
-            } else if (!isGameOver && torchBattery < 70) {
+            } else if (!isGameOver && torchBattery < 50) {
                 // If not in a blackout, decrement the safety cooldown clock
                 if (nextBlackoutRoll > 0) nextBlackoutRoll--;
 
