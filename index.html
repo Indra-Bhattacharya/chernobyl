@@ -12,8 +12,9 @@
             /* FIX: Use Dynamic Viewport dimensions to completely eliminate mobile address bar gaps */
             height: 100dvh; 
             width: 100dvw;
-            margin: 0; 
-            overflow: hidden; 
+            margin: 0;        /* Removes default browser white border gaps */
+            padding: 0;       /* Erases padding boundaries */
+            overflow: hidden; /* Strictly hides vertical and horizontal scrollbars */
             /* FIX: Prevents mobile devices from pulling down to refresh or zooming the screen */
             touch-action: none; 
             -webkit-touch-callout: none;
@@ -60,9 +61,26 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // 1. SET SCREEN SIZES
+        // Dynamically resize canvas to fill the screen
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+		
+		// FIX 1: Make targetSize global so all resizing functions can read it
+        const TARGET_SIZE = 45; 
+        let colsCalculated = Math.floor(canvas.width / TARGET_SIZE);
+        let rowsCalculated = Math.floor(canvas.height / TARGET_SIZE);
+        
+        // Force odd numbers so the maze generation works perfectly
+        let COLS = colsCalculated % 2 === 0 ? colsCalculated - 1 : colsCalculated;
+        let ROWS = rowsCalculated % 2 === 0 ? rowsCalculated - 1 : rowsCalculated;
+        
+        let TILE_WIDTH = canvas.width / COLS;
+        let TILE_HEIGHT = canvas.height / ROWS;
+		
+		let map = [];
+        let keys = {};
+        let torchBattery = 100; 
+        let isGameOver = false;
 		
 		// 1. SELECT ELEMENT NODES
         const startOverlay = document.getElementById('start-overlay');
@@ -71,11 +89,12 @@
         // 2. FULLSCREEN AND ORIENTATION LOCK MANAGEMENT ROUTINE
 		async function activateFullscreenLandscape() {
             try {
-                // Request HTML5 Fullscreen layout access
-                if (canvas.requestFullscreen) {
-                    await canvas.requestFullscreen();
-                } else if (canvas.webkitRequestFullscreen) { /* iOS Safari support path */
-                    await canvas.webkitRequestFullscreen();
+                // FIX: Request Fullscreen on the document root element instead of the canvas.
+                // This allows the canvas to recalculate its width and height and fill 100% of the screen.
+                if (document.documentElement.requestFullscreen) {
+                    await document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) { /* iOS Safari fallback */
+                    await document.documentElement.webkitRequestFullscreen();
                 }
 
                 // Attempt to run the screen orientation lock engine
@@ -99,46 +118,31 @@
 		
 		// Helper routine that safely resizes map dimensions over the air on rotation changes
 		function handleResizeEvent() {
-            // Update canvas pixel sizes dynamically 
+            // Update canvas dimensions to match the absolute fullscreen bounds
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
 
-            // FIX: Recalculate TILE dimensions on the fly instead of refreshing the window
-            // This stops the infinite looping bug on desktop monitors
-            let colsCalculated = Math.floor(canvas.width / targetSize);
-            let rowsCalculated = Math.floor(canvas.height / targetSize);
+            // FIX 2: Recalculate column and row allocations using global TARGET_SIZE
+            let colsCalculated = Math.floor(canvas.width / TARGET_SIZE);
+            let rowsCalculated = Math.floor(canvas.height / TARGET_SIZE);
             
-            // Re-map constraints cleanly
-            let newCols = colsCalculated % 2 === 0 ? colsCalculated - 1 : colsCalculated;
-            let newRows = rowsCalculated % 2 === 0 ? rowsCalculated - 1 : rowsCalculated;
+            // Re-apply odd constraint parameters
+            COLS = colsCalculated % 2 === 0 ? colsCalculated - 1 : colsCalculated;
+            ROWS = rowsCalculated % 2 === 0 ? rowsCalculated - 1 : rowsCalculated;
 
-            // Only run a map generator if the scale numbers genuinely shift
-            if (newCols !== COLS || newRows !== ROWS) {
-                resetGameEngine(); 
-            }
+            // FIX 3: Instantly update tile pixel scalars so everything fills the screen perfectly
+            TILE_WIDTH = canvas.width / COLS;
+            TILE_HEIGHT = canvas.height / ROWS;
+
+            // Regenerate a fresh, matching maze layout matrix container
+            resetGameEngine(); 
         }
 
         // Catch orientation rotation updates instantly on mobile devices
         window.addEventListener('resize', handleResizeEvent);
         window.addEventListener('orientationchange', () => {
             setTimeout(handleResizeEvent, 200); // 200ms delay gives phone buffer time to complete rotation
-        });
-		
-        let targetSize = 45; 
-        let colsCalculated = Math.floor(canvas.width / targetSize);
-        let rowsCalculated = Math.floor(canvas.height / targetSize);
-        
-        // Force odd numbers so the maze generation works perfectly
-        const COLS = colsCalculated % 2 === 0 ? colsCalculated - 1 : colsCalculated;
-        const ROWS = rowsCalculated % 2 === 0 ? rowsCalculated - 1 : rowsCalculated;
-        
-        const TILE_WIDTH = canvas.width / COLS;
-        const TILE_HEIGHT = canvas.height / ROWS;
-        
-        let map = [];
-        let keys = {};
-        let torchBattery = 100; 
-        let isGameOver = false;
+        });	                       
         
         // Mobile virtual joystick trackers
         let touchStart = null;  // Stores original coordinates where thumb touched down
