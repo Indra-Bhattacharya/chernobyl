@@ -29,16 +29,24 @@
             height: 100%;
         }
 		
-		/* 🔄 DYNAMIC ROTATION SELECTOR (Fires ONLY after tapping start) */
-        body.rotated-game {
-            transform: rotate(90deg);
-            transform-origin: center center;
-            width: 100dvh !important;
-            height: 100dvw !important;
-        }
-        body.rotated-game canvas {
-            width: 100dvh !important;
-            height: 100dvw !important;
+		/* Force a landscape layout via CSS even if the phone's system lock is active */
+        @media (orientation: portrait) {
+            body {
+                /* Flips the entire webpage 90 degrees sideways */
+                transform: rotate(90deg);
+                transform-origin: center center;
+                width: 100dvh !important;  /* Swaps dimensions to prevent clipping */
+                height: 100dvw !important;
+            }
+            canvas {
+                width: 100dvh !important;
+                height: 100dvw !important;
+            }
+			#start-overlay {
+                width: 100dvh !important;
+                height: 100dvw !important;
+                transform: none !important;
+            }
         }
     </style>
 </head>
@@ -103,12 +111,7 @@
             } catch (error) {
                 console.log("Fullscreen system skipped:", error);
             }
-			
-			// FIX: If the user is on a vertical mobile phone, append the custom rotation layout class
-            if (window.innerHeight > window.innerWidth) {
-                document.body.classList.add('rotated-game');
-            }
-			
+
             // Hide menu window and update dimensions
             startOverlay.style.display = 'none';
             handleResizeEvent();
@@ -242,8 +245,8 @@
 
             // FIX: Smooth Analog Vector Steering for Touch Screens
             if (touchStart && touchMove) {
-				// FIX: Look up the active presence of our class token to toggle the inverted touch axis
-                let isPageRotated = document.body.classList.contains('rotated-game');
+				// FIX: Check if the device is physically vertical (meaning the CSS engine is actively rotating it)
+                let isPageRotated = window.innerHeight > window.innerWidth;
                 
                 let dx, dy;
                 if (isPageRotated) {
