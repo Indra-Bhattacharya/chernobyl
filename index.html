@@ -31,8 +31,13 @@
     </style>
 </head>
 <body>
-
-    <canvas id="gameCanvas"></canvas>
+	
+	<div id="start-overlay" style="position: fixed; top: 0; left: 0; width: 100dvw; height: 100dvh; background: #111; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: sans-serif;">
+        <h1 style="color: #ffcc00; font-size: 2rem; margin-bottom: 20px; letter-spacing: 2px;">CHERNOBYL DARK MAZE</h1>
+        <button id="start-btn" style="background: #ffcc00; color: #000; border: none; padding: 15px 40px; font-size: 1.2rem; font-weight: bold; border-radius: 5px; cursor: pointer;">TAP TO START GAME</button>
+    </div>
+    
+	<canvas id="gameCanvas"></canvas>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
@@ -41,7 +46,63 @@
         // 1. SET SCREEN SIZES
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+		
+		// 1. SELECT ELEMENT NODES
+        const startOverlay = document.getElementById('start-overlay');
+        const startBtn = document.getElementById('start-btn');
 
+        // 2. FULLSCREEN AND ORIENTATION LOCK MANAGEMENT ROUTINE
+        async function activateFullscreenLandscape() {
+            try {
+                // Request standard HTML5 Fullscreen mode on the page document root element [2]
+                if (document.documentElement.requestFullscreen) {
+                    await document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) { /* Safari support */
+                    await document.documentElement.webkitRequestFullscreen();
+                }
+
+                // Force the browser screen orientation into a horizontal landscape layout [1]
+                if (screen.orientation && screen.orientation.lock) {
+                    await screen.orientation.lock('landscape');
+                }
+            } catch (error) {
+                console.log("Orientation lock or fullscreen was bypassed/declined:", error);
+            }
+
+            // Hide the overlay screen and trigger the maze sizes recalculation
+            startOverlay.style.display = 'none';
+            handleResizeEvent();
+        }
+
+        // Bind the fullscreen activation function to the click/touch event
+        startBtn.addEventListener('click', activateFullscreenLandscape);
+        startBtn.addEventListener('touchstart', activateFullscreenLandscape);
+		
+		// Helper routine that safely resizes map dimensions over the air on rotation changes
+        function handleResizeEvent() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            let targetSize = 45; 
+            let colsCalculated = Math.floor(canvas.width / targetSize);
+            let rowsCalculated = Math.floor(canvas.height / targetSize);
+            
+            // Re-enforce dynamic grid boundary odd integers
+            let newCols = colsCalculated % 2 === 0 ? colsCalculated - 1 : colsCalculated;
+            let newRows = rowsCalculated % 2 === 0 ? rowsCalculated - 1 : rowsCalculated;
+
+            // Only trigger a fresh maze re-carver if dimensions genuinely changed
+            if (newCols !== COLS || newRows !== ROWS) {
+                location.reload(); // Quick refresh ensures array structures recalculate perfectly
+            }
+        }
+
+        // Catch orientation rotation updates instantly on mobile devices
+        window.addEventListener('resize', handleResizeEvent);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(handleResizeEvent, 200); // 200ms delay gives phone buffer time to complete rotation
+        });
+		
         let targetSize = 45; 
         let colsCalculated = Math.floor(canvas.width / targetSize);
         let rowsCalculated = Math.floor(canvas.height / targetSize);
