@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fullscreen Dark Maze Game</title>
+    <style>
+		body { 
+            background-color: #111; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            overflow: hidden; 
+            /* FIX: Prevents mobile devices from pulling down to refresh or zooming the screen */
+            touch-action: none; 
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        canvas { 
+            background-color: #1a1a1a; 
+            display: block; 
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 1. SET SCREEN SIZES
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let targetSize = 45; 
+        let colsCalculated = Math.floor(canvas.width / targetSize);
+        let rowsCalculated = Math.floor(canvas.height / targetSize);
+        
+        // Force odd numbers so the maze generation works perfectly
+        const COLS = colsCalculated % 2 === 0 ? colsCalculated - 1 : colsCalculated;
+        const ROWS = rowsCalculated % 2 === 0 ? rowsCalculated - 1 : rowsCalculated;
+        
+        const TILE_WIDTH = canvas.width / COLS;
+        const TILE_HEIGHT = canvas.height / ROWS;
+        
+        let map = [];
+        let keys = {};
+        let torchBattery = 100; 
+        let isGameOver = false;
+        
+        // Mobile virtual joystick trackers
+        let touchStart = null;  // Stores original coordinates where thumb touched down
+        let touchMove = null;   // Stores live coordinates where thumb is currently dragging
+
+        // Chernobyl radiation/unstable power variables
+        let blackoutTimer = 0;      // Tracks how many frames of total darkness are left
+        let nextBlackoutRoll = 0;   // Cooldown tracker to prevent non-stop back-to-back blackouts
+
+
+        // Initialize map filled with solid walls (1s)
+        for (let r = 0; r < ROWS; r++) {
+            map[r] = [];
+            for (let c = 0; c < COLS; c++) {
+                map[r][c] = 1; 
+            }
+        }
+
+        // 2. PROCEDURAL MAZE GENERATOR
+        function generateRandomMaze() {
+            let stack = [];
+            let current = { r: 1, c: 1 };
+            map[current.r][current.c] = 0;
+
+            while (true) {
+                let neighbors = [];
+                let r = current.r;
+                let c = current.c;
+
+                if (r > 1 && map[r - 2][c] === 1) neighbors.push({ r: r - 2, c: c, wallR: r - 1, wallC: c });
+                if (r < ROWS - 2 && map[r + 2][c] === 1) neighbors.push({ r: r + 2, c: c, wallR: r + 1, wallC: c });
+                if (c > 1 && map[r][c - 2] === 1) neighbors.push({ r: r, c: c - 2, wallR: r, wallC: c - 1 });
+                if (c < COLS - 2 && map[r][c + 2] === 1) neighbors.push({ r: r, c: c + 2, wallR: r, wallC: c + 1 });
+
+                if (neighbors.length > 0) {
+                    let next = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    map[next.wallR][next.wallC] = 0;
+                    map[next.r][next.c] = 0;
+                    stack.push(current);
+                    current = next;
+                } else if (stack.length > 0) {
+                    current = stack.pop();
+                } else {
+                    break; 
+                }
+            }
+
+            // Explicitly unlock start and bottom-right exit positions
+            map[1][1] = 0;
+            map[ROWS - 2][COLS - 2] = 0;
+        }
+
+        generateRandomMaze();
+
+        // 3. SET DYNAMIC PLAYER POSITION (Centered in cell 1,1)
+        let player = { 
+            x: TILE_WIDTH * 1.5, 
+            y: TILE_HEIGHT * 1.5, 
+            speed: 4 
+        };
+
+        // Key Listeners
+        window.addEventListener('keydown', e => { keys[e.key] = true; });
+        window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+		// Mobile Touch Listeners
+        window.addEventListener('touchstart', e => {
+            // FIX: If the game is ended, tapping anywhere on a touch device triggers an instant map reset
+            if (isGameOver || torchBattery <= 0) {
+                resetGameEngine();
+                return;
+            }
+            touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            touchMove = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }, { passive: false });
+
+        window.addEventListener('touchmove', e => {
+            if (!touchStart) return;
+            // Update active dragging coordinates
+            touchMove = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }, { passive: false });
+
+        window.addEventListener('touchend', e => {
+            // Clear calculations when thumb lifts off the glass panel
+            touchStart = null;
+            touchMove = null;
+        });
+
+        function update() {
+			// Mobile Swipe Translation Vector Logic
+            if (touchStart && touchMove) {
+                let dx = touchMove.x - touchStart.x;
+                let dy = touchMove.y - touchStart.y;
+                let threshold = 15; // Minimum drag distance to register a movement command
+
+                // Clear older active automated states
+                keys['ArrowUp'] = keys['ArrowDown'] = keys['ArrowLeft'] = keys['ArrowRight'] = false;
+
+                // Determine dominant movement axis swipe vector direction
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    if (dx > threshold) keys['ArrowRight'] = true;
+                    if (dx < -threshold) keys['ArrowLeft'] = true;
+                } else {
+                    if (dy > threshold) keys['ArrowDown'] = true;
+                    if (dy < -threshold) keys['ArrowUp'] = true;
+                }
+            }
+		
+            let nextX = player.x;
+            let nextY = player.y;
+            let radius = 12; // Player width safety bubble
+
+            if (keys['ArrowUp'] || keys['w']) nextY -= player.speed;
+            if (keys['ArrowDown'] || keys['s']) nextY += player.speed;
+            if (keys['ArrowLeft'] || keys['a']) nextX -= player.speed;
+            if (keys['ArrowRight'] || keys['d']) nextX += player.speed;
+
+            function isWall(x, y) {
+                let cellX = Math.floor(x / TILE_WIDTH);
+                let cellY = Math.floor(y / TILE_HEIGHT);
+                if (cellY < 0 || cellY >= ROWS || cellX < 0 || cellX >= COLS) return true;
+                return map[cellY][cellX] === 1;
+            }
+
+            // Box collision check on corners to avoid getting stuck
+            let canMoveX = !isWall(nextX - radius, player.y - radius + 2) && 
+                           !isWall(nextX - radius, player.y + radius - 2) &&
+                           !isWall(nextX + radius, player.y - radius + 2) && 
+                           !isWall(nextX + radius, player.y + radius - 2);
+
+            let canMoveY = !isWall(player.x - radius + 2, nextY - radius) && 
+                           !isWall(player.x + radius - 2, nextY - radius) &&
+                           !isWall(player.x - radius + 2, nextY + radius) && 
+                           !isWall(player.x + radius - 2, nextY + radius);
+
+            if (canMoveX) player.x = nextX;
+            if (canMoveY) player.y = nextY;
+
+            // Battery continuous depletion logic
+            if (!isGameOver && torchBattery > 0) {
+                torchBattery -= 0.03; 
+                if (torchBattery < 0) torchBattery = 0;
+            }
+			
+			// Chernobyl unstable power management logic
+            if (blackoutTimer > 0) {
+                blackoutTimer--; // Count down the active blackout frames
+            } else if (!isGameOver && torchBattery < 70) {
+                // If not in a blackout, decrement the safety cooldown clock
+                if (nextBlackoutRoll > 0) nextBlackoutRoll--;
+
+                // Roll a 0.15% random chance each frame to cause a blackout (if safety cooldown is over)
+                if (nextBlackoutRoll === 0 && Math.random() < 0.0015) {
+                    // 60 frames = ~1 second. Randomly select an outage duration between 1 to 2 seconds.
+                    blackoutTimer = Math.floor(60 + Math.random() * 60);
+                    nextBlackoutRoll = 300; // Force a 5-second safety grace window before the torch can short out again
+                }
+            }
+			
+			// 1. CHECK WIN CONDITION (Did player step on the green tile?)
+            let playerCellX = Math.floor(player.x / TILE_WIDTH);
+            let playerCellY = Math.floor(player.y / TILE_HEIGHT);
+            if (!isGameOver && playerCellX === COLS - 2 && playerCellY === ROWS - 2) {
+                isGameOver = true;
+            }
+
+            // 2. KEYBOARD RESTART TRIGGERS
+            if ((isGameOver || torchBattery <= 0) && keys['r']) {
+                resetGameEngine();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Exit Square
+            ctx.fillStyle = '#00ff66';
+            let exitX = (COLS - 2) * TILE_WIDTH;
+            let exitY = (ROWS - 2) * TILE_HEIGHT;
+            ctx.fillRect(exitX, exitY, TILE_WIDTH, TILE_HEIGHT);
+
+            // Draw Maze Solid Block Walls
+            ctx.fillStyle = '#444';
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (map[r][c] === 1) {
+                        ctx.fillRect(c * TILE_WIDTH, r * TILE_HEIGHT, Math.ceil(TILE_WIDTH), Math.ceil(TILE_HEIGHT));
+                    }
+                }
+            }
+
+			// Draw Player - Only visible if there is juice and it hasn't shorted out
+            if (torchBattery > 0 && blackoutTimer === 0) {
+                ctx.fillStyle = '#ffcc00';
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, 12, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Darkness Shadow Layer Mask Configuration
+            ctx.save();
+            
+            // Calculate baseline torch circle size
+            let baseRadius = (torchBattery / 100) * 160;
+            
+            // INTENSIFY FLICKERING GRADUALLY: Calculate an instability factor based on missing battery
+            // Battery at 100% -> factor is 0. Battery at 10% -> factor is 0.9 (9x standard flickering)
+            let radiationInstability = (100 - torchBattery) / 10;
+            
+            // Generate standard noise, then scale it directly by our dynamic instability multiplier
+            let baseNoise = Math.sin(Date.now() * 0.08) * 3 * Math.random();
+            let flickerNoise = baseNoise * (1 + radiationInstability);
+            
+            // Force final radius to 0 immediately if blackout is active OR battery is dead
+            let finalRadius = 0;
+            if (torchBattery > 0 && blackoutTimer === 0) {
+                finalRadius = Math.max(0, baseRadius + flickerNoise);
+            }
+
+            ctx.beginPath();
+            ctx.rect(0, 0, canvas.width, canvas.height);
+            
+            // Cutout the flashlight sight hole if light is emitting
+            if (finalRadius > 0) {
+                ctx.arc(player.x, player.y, finalRadius, 0, Math.PI * 2, true); 
+            }
+            ctx.clip();
+
+            ctx.fillStyle = "rgba(5, 5, 5, 0.98)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+			// 1. FIRST CLOSE OUT THE CLIPPING AREA BARRIER
+			ctx.restore();
+
+            // Draw UI Stats Texts
+			// FIX: Explicitly enforce left alignment so the text never leaks or clips
+			ctx.textAlign = 'left';
+            ctx.fillStyle = torchBattery < 25 ? '#ff3333' : '#ffcc00';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillText(`🔋Battery: ${Math.ceil(torchBattery)}%`, 20, 40);
+            
+			if (torchBattery <= 0) {
+                ctx.fillStyle = '#ff3333';
+                ctx.font = 'bold 40px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText("BATTERY DEAD - LOST IN DARKNESS", canvas.width / 2, canvas.height / 2 - 20);
+                
+                ctx.font = '20px sans-serif';
+                ctx.fillStyle = '#888';
+                ctx.fillText("Press 'R' or Tap Screen to Restart", canvas.width / 2, canvas.height / 2 + 30);
+            }
+
+            // 3. DRAW VICTORY WIN STATE SCREEN OVERLAY
+            if (isGameOver && torchBattery > 0) {
+                // FIX: Use a 100% solid, opaque black color block instead of a translucent alpha value.
+                // This creates an impenetrable cover layer that completely hides the gameworld underneath.
+                ctx.fillStyle = "#111";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = '#00ff66';
+                ctx.font = 'bold 50px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText("RADIATION ESCAPED!", canvas.width / 2, canvas.height / 2 - 20);
+
+                ctx.font = 'bold 22px sans-serif';
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText("You navigated the Chernobyl maze safely.", canvas.width / 2, canvas.height / 2 + 30);
+
+                ctx.font = '20px sans-serif';
+                ctx.fillStyle = '#ffcc00';
+                ctx.fillText("Press 'R' or Tap Screen to Play Again", canvas.width / 2, canvas.height / 2 + 80);
+            }
+			
+			// 3. DRAW VIRTUAL JOYSTICK PAD OVERLAY (Safely outside the mask layer)
+            if (touchStart && touchMove) {
+                ctx.save();
+                
+                // Outer ring stabilizer anchor base
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(touchStart.x, touchStart.y, 45, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Inner dynamic moving thumb stick handle node
+                let dx = touchMove.x - touchStart.x;
+                let dy = touchMove.y - touchStart.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                let maxDist = 45;
+
+                // Clamp stick layout handle inside bounds
+                let stickX = touchStart.x + (dist > maxDist ? (dx / dist) * maxDist : dx);
+                let stickY = touchStart.y + (dist > maxDist ? (dy / dist) * maxDist : dy);
+
+                ctx.fillStyle = "rgba(255, 204, 0, 0.4)";
+                ctx.beginPath();
+                ctx.arc(stickX, stickY, 20, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+		
+		// Wipes old game variables and constructs a completely fresh level map layout
+        function resetGameEngine() {
+            // Re-initialize clear map container grids
+            for (let r = 0; r < ROWS; r++) {
+                map[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    map[r][c] = 1;
+                }
+            }
+            
+            // Build a completely new procedural map layout routing matrix
+            generateRandomMaze();
+            
+            // Refill stats parameters
+            player.x = TILE_WIDTH * 1.5;
+            player.y = TILE_HEIGHT * 1.5;
+            torchBattery = 100;
+            blackoutTimer = 0;
+            nextBlackoutRoll = 0;
+            isGameOver = false;
+            keys = {}; // Reset pressed key cache state to prevent drift
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
