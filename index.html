@@ -27,7 +27,22 @@
             width: 100%;
             height: 100%;
         }
+		/* CSS Orientation Guard: Displays warning text ONLY when phone is held vertically */
+        #rotation-warning {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #111; z-index: 9999;
+            color: #ffcc00; font-family: sans-serif; font-weight: bold;
+            text-align: center; align-items: center; justify-content: center;
+            font-size: 1.2rem; padding: 20px; box-sizing: border-box;
+        }
 
+        @media (orientation: portrait) {
+            #rotation-warning {
+                display: flex; /* Forces warning layer forward when vertical */
+            }
+        }
     </style>
 </head>
 <body>
@@ -38,8 +53,10 @@
     </div>
     
 	<canvas id="gameCanvas"></canvas>
-
-    <script>
+	
+	<div id="rotation-warning">☢️ CHERNOBYL RADIATION HAZARD ☢️<br><br>Please rotate your phone horizontally to start your escape.</div>
+    
+	<script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
@@ -52,24 +69,26 @@
         const startBtn = document.getElementById('start-btn');
 
         // 2. FULLSCREEN AND ORIENTATION LOCK MANAGEMENT ROUTINE
-        async function activateFullscreenLandscape() {
+		async function activateFullscreenLandscape() {
             try {
-                // Request standard HTML5 Fullscreen mode on the page document root element [2]
-                if (document.documentElement.requestFullscreen) {
-                    await document.documentElement.requestFullscreen();
-                } else if (document.documentElement.webkitRequestFullscreen) { /* Safari support */
-                    await document.documentElement.webkitRequestFullscreen();
+                // Request HTML5 Fullscreen layout access
+                if (canvas.requestFullscreen) {
+                    await canvas.requestFullscreen();
+                } else if (canvas.webkitRequestFullscreen) { /* iOS Safari support path */
+                    await canvas.webkitRequestFullscreen();
                 }
 
-                // Force the browser screen orientation into a horizontal landscape layout [1]
+                // Attempt to run the screen orientation lock engine
                 if (screen.orientation && screen.orientation.lock) {
-                    await screen.orientation.lock('landscape');
+                    await screen.orientation.lock('landscape').catch(e => {
+                        console.log("Browser orientation locked via system, falling back to CSS.");
+                    });
                 }
             } catch (error) {
-                console.log("Orientation lock or fullscreen was bypassed/declined:", error);
+                console.log("Fullscreen system skipped:", error);
             }
 
-            // Hide the overlay screen and trigger the maze sizes recalculation
+            // Hide menu window and update dimensions
             startOverlay.style.display = 'none';
             handleResizeEvent();
         }
@@ -79,21 +98,23 @@
         startBtn.addEventListener('touchstart', activateFullscreenLandscape);
 		
 		// Helper routine that safely resizes map dimensions over the air on rotation changes
-        function handleResizeEvent() {
+		function handleResizeEvent() {
+            // Update canvas pixel sizes dynamically 
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
 
-            let targetSize = 45; 
+            // FIX: Recalculate TILE dimensions on the fly instead of refreshing the window
+            // This stops the infinite looping bug on desktop monitors
             let colsCalculated = Math.floor(canvas.width / targetSize);
             let rowsCalculated = Math.floor(canvas.height / targetSize);
             
-            // Re-enforce dynamic grid boundary odd integers
+            // Re-map constraints cleanly
             let newCols = colsCalculated % 2 === 0 ? colsCalculated - 1 : colsCalculated;
             let newRows = rowsCalculated % 2 === 0 ? rowsCalculated - 1 : rowsCalculated;
 
-            // Only trigger a fresh maze re-carver if dimensions genuinely changed
+            // Only run a map generator if the scale numbers genuinely shift
             if (newCols !== COLS || newRows !== ROWS) {
-                location.reload(); // Quick refresh ensures array structures recalculate perfectly
+                resetGameEngine(); 
             }
         }
 
