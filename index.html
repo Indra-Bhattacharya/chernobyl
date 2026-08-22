@@ -34,13 +34,18 @@
             body {
                 /* Flips the entire webpage 90 degrees sideways */
                 transform: rotate(90deg);
-                transform-origin: center;
-                width: 100dvh;  /* Swaps dimensions to prevent clipping */
-                height: 100dvw;
+                transform-origin: center center;
+                width: 100dvh !important;  /* Swaps dimensions to prevent clipping */
+                height: 100dvw !important;
             }
             canvas {
-                width: 100dvh;
-                height: 100dvw;
+                width: 100dvh !important;
+                height: 100dvw !important;
+            }
+			#start-overlay {
+                width: 100dvh !important;
+                height: 100dvw !important;
+                transform: none !important;
             }
         }
     </style>
