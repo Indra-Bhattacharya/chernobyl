@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <title>CHERNOBYL</title>
-	<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://w3.org' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%23ffcc00'/%3E%3Cpath d='M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0-2.5a3.5 3.5 0 0 1 3.03 1.75l2.6-1.5a6.5 6.5 0 0 0-11.26 0l2.6 1.5A3.5 3.5 0 0 1 12 8.5zm-3.03 5.25a3.5 3.5 0 0 1 0-3.5l-2.6-1.5a6.5 6.5 0 0 0 0 6.5zm6.06 0l2.6 1.5a6.5 6.5 0 0 0 0-6.5l-2.6 1.5a3.5 3.5 0 0 1 0 3.5z' fill='%23111111'/%3E%3C/svg%3E">
+	<link rel="icon" href="data:image/svg+xml,
+	<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+		<rect width='100' height='100' rx='18' fill='%23FFD600'/>
+		<text x='50' y='78' text-anchor='middle' font-size='88'>☢</text>
+	</svg>">
     <style>
 		body { 
             background-color: #111; 
@@ -357,15 +361,15 @@
 			fuzzOsc.stop(now + 0.014);
         }
 
-		function update() {
-            // Clear older active manual keyboard states by default
-            keys['ArrowUp'] = keys['ArrowDown'] = keys['ArrowLeft'] = keys['ArrowRight'] = false;
-
+		function update() {            
             let moveX = 0;
             let moveY = 0;
 
             // FIX: Smooth Analog Vector Steering for Touch Screens
             if (touchStart && touchMove) {
+				// FIX: ONLY clear and overwrite the movement keys if a mobile touch dragging gesture is actively happening!
+                keys['arrowup'] = keys['arrowdown'] = keys['arrowleft'] = keys['arrowright'] = false;
+				
 				// FIX: Check if the device is physically vertical (meaning the CSS engine is actively rotating it)
                 let isPageRotated = document.body.classList.contains('rotated-game');
                 
@@ -390,6 +394,12 @@
                     // Convert the angle into smooth fractional movement speeds (between -1 and 1)
                     moveX = Math.cos(angle);
                     moveY = Math.sin(angle);
+					
+					// FIX 2: Map the mobile joystick directions to lowercase keys as well
+                    if (moveY < -0.3) keys['arrowup'] = true;
+                    if (moveY > 0.3) keys['arrowdown'] = true;
+                    if (moveX < -0.3) keys['arrowleft'] = true;
+                    if (moveX > 0.3) keys['arrowright'] = true;
                 }
             } else {
                 // Standard desktop keyboard input fallback
@@ -408,12 +418,7 @@
             // Apply movement direction directly to the player's core speed parameter
             let nextX = player.x + (moveX * player.speed);
             let nextY = player.y + (moveY * player.speed);
-            let radius = 12; 
-
-            if (keys['ArrowUp'] || keys['w']) nextY -= player.speed;
-            if (keys['ArrowDown'] || keys['s']) nextY += player.speed;
-            if (keys['ArrowLeft'] || keys['a']) nextX -= player.speed;
-            if (keys['ArrowRight'] || keys['d']) nextX += player.speed;
+            let radius = 12;            
 
             function isWall(x, y) {
                 let cellX = Math.floor(x / TILE_WIDTH);
@@ -572,7 +577,9 @@
                 
                 ctx.font = '20px sans-serif';
                 ctx.fillStyle = '#888';
-                ctx.fillText("Press 'R' or Tap Screen to Restart", canvas.width / 2, canvas.height / 2 + 30);
+				// Smoothly swap instructions depending on if they are on a phone or laptop!
+				let hintText = IS_MOBILE ? "Tap Screen to Restart" : "Press 'R' to Restart";
+				ctx.fillText(hintText, canvas.width / 2, canvas.height / 2 + 30);				
             }
 
             // 3. DRAW VICTORY WIN STATE SCREEN OVERLAY
@@ -593,7 +600,8 @@
 
                 ctx.font = '20px sans-serif';
                 ctx.fillStyle = '#ffcc00';
-                ctx.fillText("Press 'R' or Tap Screen to Play Again", canvas.width / 2, canvas.height / 2 + 80);
+				let hintText = IS_MOBILE ? "Tap Screen to Play Again" : "Press 'R' to Play Again";
+                ctx.fillText(hintText, canvas.width / 2, canvas.height / 2 + 80);
             }
 			
 			// 3. DRAW VIRTUAL JOYSTICK PAD OVERLAY (Safely outside the mask layer)
