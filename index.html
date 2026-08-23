@@ -29,24 +29,16 @@
             height: 100%;
         }
 		
-		/* Force a landscape layout via CSS even if the phone's system lock is active */
-        @media (orientation: portrait) {
-            body {
-                /* Flips the entire webpage 90 degrees sideways */
-                transform: rotate(90deg);
-                transform-origin: center center;
-                width: 100dvh !important;  /* Swaps dimensions to prevent clipping */
-                height: 100dvw !important;
-            }
-            canvas {
-                width: 100dvh !important;
-                height: 100dvw !important;
-            }
-			#start-overlay {
-                width: 100dvh !important;
-                height: 100dvw !important;
-                transform: none !important;
-            }
+		/* 🔄 DYNAMIC ROTATION SELECTOR (Fires ONLY after tapping start) */
+        body.rotated-game {
+            transform: rotate(90deg);
+            transform-origin: center center;
+            width: 100dvh !important;
+            height: 100dvw !important;
+        }
+        body.rotated-game canvas {
+            width: 100dvh !important;
+            height: 100dvw !important;
         }
     </style>
 </head>
@@ -101,17 +93,15 @@
                 } else if (document.documentElement.webkitRequestFullscreen) { /* iOS Safari fallback */
                     await document.documentElement.webkitRequestFullscreen();
                 }
-
-                // Attempt to run the screen orientation lock engine
-                if (screen.orientation && screen.orientation.lock) {
-                    await screen.orientation.lock('landscape').catch(e => {
-                        console.log("Browser orientation locked via system, falling back to CSS.");
-                    });
-                }
             } catch (error) {
                 console.log("Fullscreen system skipped:", error);
             }
-
+			
+			// FIX: If user is on a vertical screen panel, apply the rotation class right now
+            if (window.innerHeight > window.innerWidth) {
+                document.body.classList.add('rotated-game');
+            }
+			
             // Hide menu window and update dimensions
             startOverlay.style.display = 'none';
             handleResizeEvent();
@@ -123,9 +113,20 @@
 		
 		// Helper routine that safely resizes map dimensions over the air on rotation changes
 		function handleResizeEvent() {
-            // Update canvas dimensions to match the absolute fullscreen bounds
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            // FIX: Safely detect portrait mode orientation layout rules
+            let width = window.innerWidth;
+            let height = window.innerHeight;
+            let isPortrait = height > width;
+
+            if (isPortrait) {
+                document.body.classList.add('rotated-game');
+                canvas.width = height;  // Swap dimensions to prevent squishing
+                canvas.height = width;
+            } else {
+                document.body.classList.remove('rotated-game');
+                canvas.width = width;
+                canvas.height = height;
+            }					
 
             // FIX 2: Recalculate column and row allocations using global TARGET_SIZE
             let colsCalculated = Math.floor(canvas.width / TARGET_SIZE);
@@ -246,7 +247,7 @@
             // FIX: Smooth Analog Vector Steering for Touch Screens
             if (touchStart && touchMove) {
 				// FIX: Check if the device is physically vertical (meaning the CSS engine is actively rotating it)
-                let isPageRotated = window.innerHeight > window.innerWidth;
+                let isPageRotated = document.body.classList.contains('rotated-game');
                 
                 let dx, dy;
                 if (isPageRotated) {
