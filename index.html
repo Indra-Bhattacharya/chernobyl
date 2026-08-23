@@ -66,7 +66,10 @@
         <button id="start-btn" style="background: #ffcc00; color: #000; border: none; padding: 15px 40px; font-size: 1.2rem; font-weight: bold; border-radius: 5px; cursor: pointer;">TAP TO START GAME</button>
     </div>
     
-	<canvas id="gameCanvas"></canvas>	
+	<!-- Add this container box to hold the canvas cleanly -->
+    <div id="canvas-container">
+        <canvas id="gameCanvas"></canvas>
+    </div>
     
 	<script>
         const canvas = document.getElementById('gameCanvas');
