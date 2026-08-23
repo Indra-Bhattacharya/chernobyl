@@ -29,14 +29,31 @@
             height: 100%;
         }
 		
-		/* 🔄 DYNAMIC ROTATION SELECTOR (Fires ONLY after tapping start) */
+		/* 🔄 SELF-CENTERING MOBILE ROTATION ENGINE */
         body.rotated-game {
+            /* Flex center ensures the flipped container aligns directly with your phone's screen pixels */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            
+            /* Invert the full width and height rules to create a clean landscape box */
+            width: 100dvh !important;
+            height: 100dvw !important;
+        }
+        
+        body.rotated-game #canvas-container {
+            /* Rotate the internal canvas wrapper panel instead of stretching the main body element */
             transform: rotate(90deg);
             transform-origin: center center;
             width: 100dvh !important;
             height: 100dvw !important;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
+
         body.rotated-game canvas {
+            /* Lock canvas dimensions inside the flipped wrapper bounds */
             width: 100dvh !important;
             height: 100dvw !important;
         }
